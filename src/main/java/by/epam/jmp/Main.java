@@ -8,6 +8,8 @@ import com.mongodb.client.MongoDatabase;
 import static com.mongodb.client.model.Accumulators.*;
 import static com.mongodb.client.model.Aggregates.*;
 import static com.mongodb.client.model.Filters.eq;
+import static com.mongodb.client.model.Filters.gt;
+import static com.mongodb.client.model.Filters.size;
 
 import org.bson.Document;
 
@@ -83,6 +85,35 @@ public class Main {
         }
 
         //Max number of new friendships from month to month
+        iterator =
+                mongoDatabase.
+                        getCollection("users").aggregate(Arrays.asList(
+                            unwind("$friends"),
+                            group(new BasicDBObject("$month", "$friends.friendshipDate"),
+                                    sum("count", 1))
+                )).iterator();
+        try{
+            while (iterator.hasNext()) {
+                Document doc = iterator.next();
+                System.out.println("Number of friendships for " + doc.get("_id") + " month - " + doc.get("count") );
+            }
+        }finally {
+            iterator.close();
+        }
+
+        //Min number of watched movies by users with more than 20 friends
+        iterator =
+                mongoDatabase.
+                        getCollection("users").aggregate(Arrays.asList(
+                        project(new BasicDBObject("friendsCount", new BasicDBObject("$size", "friends")))
+                )).iterator();
+        try{
+            while (iterator.hasNext()) {
+                Document doc = iterator.next();
+            }
+        }finally {
+            iterator.close();
+        }
     }
 
     public static List<Document> getRandomDocumentSublist(List<Document> superList, int sublistSize ){
