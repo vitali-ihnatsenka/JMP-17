@@ -7,9 +7,8 @@ import com.mongodb.client.MongoDatabase;
 
 import static com.mongodb.client.model.Accumulators.*;
 import static com.mongodb.client.model.Aggregates.*;
-import static com.mongodb.client.model.Filters.eq;
-import static com.mongodb.client.model.Filters.gt;
-import static com.mongodb.client.model.Filters.size;
+import static com.mongodb.client.model.Filters.*;
+import static com.mongodb.client.model.Projections.*;
 
 import org.bson.Document;
 
@@ -18,6 +17,10 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 public class Main {
+    private static final int MOVIES_NUMBER = 10;
+    private static final int USERS_NUMBER = 30;
+    private static final int MAX_MOVIES_PER_USER = 8;
+    private static final int MESSAGES_PER_FRIEND = 20;
 
     public static void main(String[] args) {
         MongoClient mongoClient = new MongoClient("localhost", 27017);
@@ -27,7 +30,7 @@ public class Main {
         mongoDatabase.getCollection("users").drop();
         //create movies
         List<Document> movies = new ArrayList<>();
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < MOVIES_NUMBER; i++) {
             Document doc = new Document("name", "name" + i).append("length", i * 3).append("date", getRandomDate());
             movies.add(doc);
         }
@@ -35,20 +38,20 @@ public class Main {
 
         //Create users
         List<Document> users = new ArrayList<>();
-        for (int i = 0; i < 30; i++){
+        for (int i = 0; i < USERS_NUMBER; i++){
             Document doc = new Document("name", "name" + i);
-            doc.append("movies", getRandomDocumentSublist(movies, 3));
+            doc.append("movies", getRandomDocumentSublist(movies, 1 + new Random().nextInt(MAX_MOVIES_PER_USER)));
             users.add(doc);
         }
 
         //add friends
         for(Document user: users) {
-            List<Document> friends = getRandomDocumentSublist(users, 1 + new Random().nextInt(20))
+            List<Document> friends = getRandomDocumentSublist(users, 1 + new Random().nextInt(30))
                     .stream()
                     .filter(friend -> !friend.equals(user))
                     .map(friend -> {
                         List<Document> messages = new ArrayList<>();
-                        for (int i = 0; i < 20; i++) {
+                        for (int i = 0; i < MESSAGES_PER_FRIEND; i++) {
                             messages.add(new Document("text", "text" + i).append("date", getRandomDate()));
                         }
                         friend.remove("friends");
@@ -105,11 +108,15 @@ public class Main {
         iterator =
                 mongoDatabase.
                         getCollection("users").aggregate(Arrays.asList(
-                        project(new BasicDBObject("friendsCount", new BasicDBObject("$size", "friends")))
+                        project(fields(include("name", "movies"), computed("friendsCount", new BasicDBObject("$size", "$friends")))),
+                        match(gt("friendsCount", 20)),
+                        project(fields(include("name"), computed("movieCount", new BasicDBObject("$size", "$movies")))),
+                        group("$name", min("minMovieCount", "$movieCount"))
                 )).iterator();
         try{
-            while (iterator.hasNext()) {
+            if (iterator.hasNext()) {
                 Document doc = iterator.next();
+                System.out.println("Min number of watched movies by users with more than 20 friends - " + doc.get("minMovieCount"));
             }
         }finally {
             iterator.close();
